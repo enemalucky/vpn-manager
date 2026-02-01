@@ -67,24 +67,83 @@ if ! command -v ipsec &> /dev/null; then
     NEED_INSTALL+=("strongswan")
 fi
 
+NEED_FRR=false
 if ! command -v vtysh &> /dev/null; then
-    NEED_INSTALL+=("frr")
+    NEED_FRR=true
 fi
 
-if [ ${#NEED_INSTALL[@]} -ne 0 ]; then
-    echo "Installing: ${NEED_INSTALL[*]}"
-    apt-get update
-    apt-get install -y "${NEED_INSTALL[@]}"
+if [ ${#NEED_INSTALL[@]} -ne 0 ] || [ "$NEED_FRR" = true ]; then
+    echo "Installing: ${NEED_INSTALL[*]} frr"
+    
+    # Install StrongSwan first
+    if [ ${#NEED_INSTALL[@]} -ne 0 ]; then
+        apt-get update
+        apt-get install -y "${NEED_INSTALL[@]}"
+    fi
+    
+    # Install FRR (needs special handling for older Ubuntu)
+    if [ "$NEED_FRR" = true ]; then
+        echo "  📦 Installing FRR..."
+        
+        # Detect Ubuntu version
+        UBUNTU_VERSION=$(lsb_release -rs 2>/dev/null || echo "unknown")
+        
+        if [ "$UBUNTU_VERSION" = "18.04" ]; then
+            # Ubuntu 18.04 - Add FRR repository
+            echo "  📝 Adding FRR repository for Ubuntu 18.04..."
+            
+            # Install prerequisites
+            apt-get install -y curl gnupg lsb-release
+            
+            # Add FRR GPG key
+            curl -s https://deb.frrouting.org/frr/keys.asc | apt-key add -
+            
+            # Add FRR repository
+            FRRVER="frr-stable"
+            echo "deb https://deb.frrouting.org/frr $(lsb_release -s -c) $FRRVER" | tee /etc/apt/sources.list.d/frr.list
+            
+            # Update and install
+            apt-get update
+            apt-get install -y frr frr-pythontools
+            
+        elif [ "$UBUNTU_VERSION" = "20.04" ] || [ "$UBUNTU_VERSION" = "22.04" ]; then
+            # Ubuntu 20.04+ - FRR in default repos
+            apt-get update
+            apt-get install -y frr frr-pythontools
+            
+        else
+            # Try default installation
+            echo "  ⚠️  Unknown Ubuntu version, trying default installation..."
+            apt-get update
+            
+            if apt-cache show frr &>/dev/null; then
+                apt-get install -y frr frr-pythontools
+            else
+                # Add FRR repository as fallback
+                echo "  📝 Adding FRR repository..."
+                apt-get install -y curl gnupg lsb-release
+                curl -s https://deb.frrouting.org/frr/keys.asc | apt-key add -
+                FRRVER="frr-stable"
+                echo "deb https://deb.frrouting.org/frr $(lsb_release -s -c) $FRRVER" | tee /etc/apt/sources.list.d/frr.list
+                apt-get update
+                apt-get install -y frr frr-pythontools
+            fi
+        fi
+        
+        echo "  ✅ FRR installed"
+    fi
     
     # Enable BGP in FRR
-    if [[ " ${NEED_INSTALL[@]} " =~ " frr " ]]; then
+    if [ "$NEED_FRR" = true ]; then
+        echo "  📝 Enabling BGP in FRR..."
         sed -i 's/bgpd=no/bgpd=yes/' /etc/frr/daemons
-        echo "  ✅ BGP enabled in FRR"
+        echo "  ✅ BGP enabled"
     fi
     
     # Enable and start services
-    systemctl enable strongswan frr
-    systemctl start strongswan frr
+    systemctl enable strongswan frr 2>/dev/null || true
+    systemctl start strongswan 2>/dev/null || true
+    systemctl start frr 2>/dev/null || true
     
     echo -e "${GREEN}✅ VPN software installed${NC}\n"
 else

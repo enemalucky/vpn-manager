@@ -901,19 +901,68 @@ class VPNManager:
         if missing:
             print(f"\n📦 Installing missing packages: {', '.join(set(missing))}")
             try:
+                # Check if FRR needs special handling
+                need_frr = 'frr' in missing
+                
+                if need_frr:
+                    # Check Ubuntu version
+                    try:
+                        result = subprocess.run(
+                            ['lsb_release', '-rs'],
+                            capture_output=True,
+                            text=True,
+                            timeout=5
+                        )
+                        ubuntu_version = result.stdout.strip()
+                    except:
+                        ubuntu_version = "unknown"
+                    
+                    print(f"  📝 Detected Ubuntu {ubuntu_version}")
+                    
+                    # For Ubuntu 18.04, add FRR repository
+                    if ubuntu_version == "18.04":
+                        print("  📝 Adding FRR repository for Ubuntu 18.04...")
+                        
+                        # Install prerequisites
+                        subprocess.run(
+                            ['apt-get', 'install', '-y', 'curl', 'gnupg', 'lsb-release'],
+                            check=True,
+                            timeout=120
+                        )
+                        
+                        # Add FRR GPG key
+                        subprocess.run(
+                            'curl -s https://deb.frrouting.org/frr/keys.asc | apt-key add -',
+                            shell=True,
+                            check=True,
+                            timeout=30
+                        )
+                        
+                        # Add FRR repository
+                        with open('/etc/apt/sources.list.d/frr.list', 'w') as f:
+                            f.write(f'deb https://deb.frrouting.org/frr bionic frr-stable\n')
+                        
+                        print("  ✅ FRR repository added")
+                
                 # Update package list
                 subprocess.run(['apt-get', 'update'], check=True, timeout=120)
                 
                 # Install packages
+                packages_to_install = list(set(missing))
+                if need_frr and 'frr' in packages_to_install:
+                    # Install FRR with pythontools
+                    packages_to_install.remove('frr')
+                    packages_to_install.extend(['frr', 'frr-pythontools'])
+                
                 subprocess.run(
-                    ['apt-get', 'install', '-y'] + list(set(missing)),
+                    ['apt-get', 'install', '-y'] + packages_to_install,
                     check=True,
                     timeout=300
                 )
                 print("✅ Packages installed successfully")
                 
                 # Enable BGP in FRR if FRR was installed
-                if 'frr' in missing:
+                if need_frr:
                     print("  📝 Enabling BGP in FRR...")
                     try:
                         with open('/etc/frr/daemons', 'r') as f:
@@ -942,8 +991,11 @@ class VPNManager:
             except Exception as e:
                 print(f"⚠️  Failed to install packages: {e}")
                 print("Please install manually:")
+                print(f"  # For Ubuntu 18.04:")
+                print(f"  curl -s https://deb.frrouting.org/frr/keys.asc | sudo apt-key add -")
+                print(f"  echo 'deb https://deb.frrouting.org/frr bionic frr-stable' | sudo tee /etc/apt/sources.list.d/frr.list")
                 print(f"  sudo apt-get update")
-                print(f"  sudo apt-get install -y {' '.join(set(missing))}")
+                print(f"  sudo apt-get install -y strongswan frr frr-pythontools")
         else:
             print("✅ All prerequisites are installed")
     
