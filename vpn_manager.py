@@ -834,6 +834,10 @@ class VPNManager:
         print("🔧 VPN MANAGER - INITIAL SETUP")
         print("="*80)
         
+        # Check and install prerequisites
+        print("\n📦 Checking prerequisites...")
+        self._check_and_install_prerequisites()
+        
         if interactive:
             self._gather_config_interactive()
         
@@ -846,33 +850,197 @@ class VPNManager:
         self.config.save_to_file(self.config_file)
         print(f"✅ Configuration saved to {self.config_file}")
         
+        # Deploy configurations to system locations
+        print("\n📋 Deploying configurations...")
+        self._deploy_configs()
+        
         # Setup VTI interfaces
         print("\n🔗 Setting up VTI interfaces...")
         try:
-            subprocess.run(['/etc/vpn/setup_vti.sh'], check=True)
+            subprocess.run(['/etc/vpn/setup_vti.sh'], check=True, timeout=30)
             print("✅ VTI interfaces configured")
-        except:
-            print("⚠️  Failed to setup VTI interfaces (may need manual setup)")
+        except Exception as e:
+            print(f"⚠️  Failed to setup VTI interfaces: {e}")
         
         # Restart services
         print("\n🔄 Restarting services...")
-        try:
-            subprocess.run(['systemctl', 'restart', 'strongswan'], check=True)
-            print("✅ StrongSwan restarted")
-        except:
-            print("⚠️  Failed to restart StrongSwan")
+        self._restart_services()
         
-        try:
-            subprocess.run(['systemctl', 'restart', 'frr'], check=True)
-            print("✅ FRR restarted")
-        except:
-            print("⚠️  Failed to restart FRR")
+        # Wait for services to stabilize
+        print("\n⏳ Waiting for services to stabilize...")
+        time.sleep(5)
+        
+        # Show initial status
+        print("\n📊 Initial Status Check:")
+        self._show_quick_status()
         
         print("\n✅ VPN setup complete!")
         print("\n💡 Next steps:")
         print("  1. Verify tunnels: sudo ipsec status")
         print("  2. Check BGP: sudo vtysh -c 'show bgp summary'")
         print("  3. Run health check: vpn_manager.py --monitor")
+        print("  4. View logs: sudo journalctl -u strongswan -f")
+    
+    def _check_and_install_prerequisites(self):
+        """Check and install required packages"""
+        required_packages = {
+            'strongswan': 'strongswan',
+            'frr': 'frr',
+            'vtysh': 'frr'
+        }
+        
+        missing = []
+        for cmd, package in required_packages.items():
+            try:
+                subprocess.run(['which', cmd], check=True, capture_output=True, timeout=5)
+                print(f"  ✅ {cmd} is installed")
+            except:
+                missing.append(package)
+                print(f"  ⚠️  {cmd} is not installed")
+        
+        if missing:
+            print(f"\n📦 Installing missing packages: {', '.join(set(missing))}")
+            try:
+                # Update package list
+                subprocess.run(['apt-get', 'update'], check=True, timeout=120)
+                
+                # Install packages
+                subprocess.run(
+                    ['apt-get', 'install', '-y'] + list(set(missing)),
+                    check=True,
+                    timeout=300
+                )
+                print("✅ Packages installed successfully")
+                
+                # Enable BGP in FRR if FRR was installed
+                if 'frr' in missing:
+                    print("  📝 Enabling BGP in FRR...")
+                    try:
+                        with open('/etc/frr/daemons', 'r') as f:
+                            content = f.read()
+                        
+                        content = content.replace('bgpd=no', 'bgpd=yes')
+                        
+                        with open('/etc/frr/daemons', 'w') as f:
+                            f.write(content)
+                        
+                        print("  ✅ BGP enabled in FRR")
+                    except Exception as e:
+                        print(f"  ⚠️  Could not enable BGP: {e}")
+                
+                # Enable and start services
+                for service in ['strongswan', 'frr']:
+                    try:
+                        subprocess.run(['systemctl', 'enable', service], check=True, timeout=10)
+                        subprocess.run(['systemctl', 'start', service], check=True, timeout=30)
+                        print(f"  ✅ {service} enabled and started")
+                    except:
+                        print(f"  ⚠️  Could not start {service}")
+                
+            except subprocess.TimeoutExpired:
+                print("⚠️  Package installation timed out")
+            except Exception as e:
+                print(f"⚠️  Failed to install packages: {e}")
+                print("Please install manually:")
+                print(f"  sudo apt-get update")
+                print(f"  sudo apt-get install -y {' '.join(set(missing))}")
+        else:
+            print("✅ All prerequisites are installed")
+    
+    def _deploy_configs(self):
+        """Deploy generated configs to system locations"""
+        deployments = [
+            ('/etc/vpn/ipsec.conf', '/etc/ipsec.conf', 0o644),
+            ('/etc/vpn/ipsec.secrets', '/etc/ipsec.secrets', 0o600),
+            ('/etc/vpn/frr.conf', '/etc/frr/frr.conf', 0o640),
+            ('/etc/vpn/aws-updown.sh', '/etc/ipsec.d/aws-updown.sh', 0o755),
+        ]
+        
+        for source, dest, perms in deployments:
+            try:
+                if Path(source).exists():
+                    # Create destination directory if needed
+                    Path(dest).parent.mkdir(parents=True, exist_ok=True)
+                    
+                    # Copy file
+                    subprocess.run(['cp', source, dest], check=True, timeout=5)
+                    
+                    # Set permissions
+                    os.chmod(dest, perms)
+                    
+                    # Set ownership for FRR config
+                    if 'frr.conf' in dest:
+                        try:
+                            subprocess.run(['chown', 'frr:frr', dest], check=True, timeout=5)
+                        except:
+                            pass
+                    
+                    print(f"  ✅ Deployed {Path(dest).name}")
+                else:
+                    print(f"  ⚠️  Source file not found: {source}")
+            except Exception as e:
+                print(f"  ⚠️  Failed to deploy {Path(dest).name}: {e}")
+    
+    def _restart_services(self):
+        """Restart VPN services"""
+        services = ['strongswan', 'frr']
+        
+        for service in services:
+            try:
+                subprocess.run(['systemctl', 'restart', service], check=True, timeout=30)
+                print(f"  ✅ {service} restarted")
+            except Exception as e:
+                print(f"  ⚠️  Failed to restart {service}: {e}")
+    
+    def _show_quick_status(self):
+        """Show quick status summary"""
+        # Check IPsec
+        try:
+            result = subprocess.run(
+                ['ipsec', 'status'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            tunnel_count = result.stdout.count('ESTABLISHED')
+            if tunnel_count > 0:
+                print(f"  ✅ IPsec: {tunnel_count} tunnel(s) established")
+            else:
+                print(f"  ⚠️  IPsec: No tunnels established yet (may take a few moments)")
+        except:
+            print("  ⚠️  IPsec: Could not check status")
+        
+        # Check BGP
+        try:
+            result = subprocess.run(
+                ['vtysh', '-c', 'show bgp summary'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if 'Established' in result.stdout:
+                established = result.stdout.count('Established')
+                print(f"  ✅ BGP: {established} session(s) established")
+            else:
+                print(f"  ⚠️  BGP: No sessions established yet (may take a few moments)")
+        except:
+            print("  ⚠️  BGP: Could not check status")
+        
+        # Check VTI
+        try:
+            result = subprocess.run(
+                ['ip', 'link', 'show'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            vti_count = result.stdout.count('vti')
+            if vti_count > 0:
+                print(f"  ✅ VTI: {vti_count} interface(s) configured")
+            else:
+                print(f"  ⚠️  VTI: No interfaces found")
+        except:
+            print("  ⚠️  VTI: Could not check status")
     
     def _gather_config_interactive(self):
         """Interactive configuration gathering"""

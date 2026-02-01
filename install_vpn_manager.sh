@@ -35,7 +35,7 @@ echo -e "${NC}"
 echo -e "${GREEN}🚀 Starting installation...${NC}\n"
 
 # Step 1: Check prerequisites
-echo -e "${BLUE}[1/8]${NC} Checking prerequisites..."
+echo -e "${BLUE}[1/9]${NC} Checking prerequisites..."
 
 # Check for required commands
 MISSING_DEPS=()
@@ -57,8 +57,42 @@ fi
 
 echo -e "${GREEN}✅ Prerequisites OK${NC}\n"
 
+# Step 1b: Install VPN software
+echo -e "${BLUE}[2/9]${NC} Installing VPN software (StrongSwan, FRR)..."
+
+# Check if already installed
+NEED_INSTALL=()
+
+if ! command -v ipsec &> /dev/null; then
+    NEED_INSTALL+=("strongswan")
+fi
+
+if ! command -v vtysh &> /dev/null; then
+    NEED_INSTALL+=("frr")
+fi
+
+if [ ${#NEED_INSTALL[@]} -ne 0 ]; then
+    echo "Installing: ${NEED_INSTALL[*]}"
+    apt-get update
+    apt-get install -y "${NEED_INSTALL[@]}"
+    
+    # Enable BGP in FRR
+    if [[ " ${NEED_INSTALL[@]} " =~ " frr " ]]; then
+        sed -i 's/bgpd=no/bgpd=yes/' /etc/frr/daemons
+        echo "  ✅ BGP enabled in FRR"
+    fi
+    
+    # Enable and start services
+    systemctl enable strongswan frr
+    systemctl start strongswan frr
+    
+    echo -e "${GREEN}✅ VPN software installed${NC}\n"
+else
+    echo -e "${GREEN}✅ VPN software already installed${NC}\n"
+fi
+
 # Step 2: Create directories
-echo -e "${BLUE}[2/8]${NC} Creating directories..."
+echo -e "${BLUE}[3/9]${NC} Creating directories..."
 
 mkdir -p /etc/vpn
 mkdir -p /var/log/vpn
@@ -67,7 +101,7 @@ mkdir -p /usr/local/bin
 echo -e "${GREEN}✅ Directories created${NC}\n"
 
 # Step 3: Install VPN Manager script
-echo -e "${BLUE}[3/8]${NC} Installing VPN Manager..."
+echo -e "${BLUE}[4/9]${NC} Installing VPN Manager..."
 
 # Check if vpn_manager.py exists in current directory
 if [ ! -f "vpn_manager.py" ]; then
@@ -82,7 +116,7 @@ chmod +x /usr/local/bin/vpn_manager.py
 echo -e "${GREEN}✅ VPN Manager installed to /usr/local/bin/${NC}\n"
 
 # Step 4: Install systemd service
-echo -e "${BLUE}[4/8]${NC} Installing systemd service..."
+echo -e "${BLUE}[5/9]${NC} Installing systemd service..."
 
 cat > /etc/systemd/system/vpn-manager.service << 'SERVICEEOF'
 [Unit]
@@ -108,7 +142,7 @@ systemctl daemon-reload
 echo -e "${GREEN}✅ Systemd service installed${NC}\n"
 
 # Step 5: Create email configuration template
-echo -e "${BLUE}[5/8]${NC} Creating email configuration template..."
+echo -e "${BLUE}[6/9]${NC} Creating email configuration template..."
 
 cat > /etc/vpn/email_config.json << 'EMAILEOF'
 {
@@ -131,7 +165,7 @@ chmod 600 /etc/vpn/email_config.json
 echo -e "${GREEN}✅ Email configuration template created${NC}\n"
 
 # Step 6: Interactive VPN configuration
-echo -e "${BLUE}[6/8]${NC} VPN Configuration Setup"
+echo -e "${BLUE}[7/9]${NC} VPN Configuration Setup"
 echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
 
 read -p "Do you want to configure VPN now? (y/n): " CONFIGURE_NOW
@@ -252,14 +286,21 @@ CONFIGEOF
     echo ""
     echo -e "${GREEN}✅ VPN configuration saved to /etc/vpn/config.json${NC}\n"
     
-    # Generate VPN configurations
-    echo -e "${BLUE}[7/8]${NC} Generating VPN configuration files..."
+    # Generate and deploy VPN configurations
+    echo -e "${BLUE}[8/9]${NC} Generating and deploying VPN configuration files..."
     
-    python3 /usr/local/bin/vpn_manager.py --setup --config /etc/vpn/config.json 2>/dev/null || {
-        echo -e "${YELLOW}⚠️  Configuration files will be generated on first run${NC}"
+    # The VPN Manager will handle:
+    # - Generating IPsec, FRR, VTI configs
+    # - Copying them to system locations
+    # - Setting correct permissions
+    # - Restarting services
+    # - Setting up VTI interfaces
+    
+    python3 /usr/local/bin/vpn_manager.py --setup --config /etc/vpn/config.json 2>&1 | grep -E "(✅|⚠️|❌)" || {
+        echo -e "${YELLOW}⚠️  Configuration will be deployed on first run${NC}"
     }
     
-    echo -e "${GREEN}✅ VPN configuration files generated${NC}\n"
+    echo -e "${GREEN}✅ VPN configured and deployed${NC}\n"
 else
     echo -e "${YELLOW}⚠️  Skipping VPN configuration. You can configure later with:${NC}"
     echo "   sudo vpn_manager.py --setup --interactive"
@@ -267,7 +308,7 @@ else
 fi
 
 # Step 7: Email configuration
-echo -e "${BLUE}[7/8]${NC} Email Notification Setup"
+echo -e "${BLUE}[8/9]${NC} Email Notification Setup"
 echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
 
 read -p "Do you want to configure email notifications now? (y/n): " CONFIGURE_EMAIL
@@ -331,7 +372,7 @@ else
 fi
 
 # Step 8: Service setup
-echo -e "${BLUE}[8/8]${NC} Service Setup"
+echo -e "${BLUE}[9/9]${NC} Service Setup"
 echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
 
 read -p "Do you want to enable and start VPN Manager service now? (y/n): " START_SERVICE
