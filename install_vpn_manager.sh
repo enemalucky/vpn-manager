@@ -141,9 +141,34 @@ if [[ $CONFIGURE_NOW =~ ^[Yy]$ ]]; then
     echo -e "${GREEN}📝 Please provide VPN configuration:${NC}\n"
     
     read -p "AWS VPN Connection ID (e.g., vpn-xxxxx): " VPN_ID
-    read -p "AWS peer IP #1: " AWS_IP1
-    read -p "AWS peer IP #2 (press Enter to skip): " AWS_IP2
-    read -p "On-premises peer IP: " ONPREM_IP
+    
+    echo ""
+    echo -e "${GREEN}📍 Outside IP Addresses (Public IPs):${NC}"
+    read -p "AWS peer outside IP #1: " AWS_IP1
+    read -p "AWS peer outside IP #2 (press Enter to skip): " AWS_IP2
+    read -p "On-premises outside IP: " ONPREM_IP
+    
+    echo ""
+    echo -e "${GREEN}📍 Inside IP Addresses (BGP Peering - 169.254.x.x):${NC}"
+    echo "These are the /30 CIDR blocks for BGP peering inside the tunnels"
+    echo ""
+    echo "Tunnel 1:"
+    read -p "  AWS inside IP [169.254.11.2]: " AWS_INSIDE_IP1
+    AWS_INSIDE_IP1=${AWS_INSIDE_IP1:-169.254.11.2}
+    read -p "  On-premises inside IP [169.254.11.1]: " ONPREM_INSIDE_IP1
+    ONPREM_INSIDE_IP1=${ONPREM_INSIDE_IP1:-169.254.11.1}
+    
+    if [ -n "$AWS_IP2" ]; then
+        echo ""
+        echo "Tunnel 2:"
+        read -p "  AWS inside IP [169.254.12.2]: " AWS_INSIDE_IP2
+        AWS_INSIDE_IP2=${AWS_INSIDE_IP2:-169.254.12.2}
+        read -p "  On-premises inside IP [169.254.12.1]: " ONPREM_INSIDE_IP2
+        ONPREM_INSIDE_IP2=${ONPREM_INSIDE_IP2:-169.254.12.1}
+    fi
+    
+    echo ""
+    echo -e "${GREEN}📡 BGP Configuration:${NC}"
     read -p "AWS ASN [64512]: " AWS_ASN
     AWS_ASN=${AWS_ASN:-64512}
     read -p "On-premises ASN [65000]: " ONPREM_ASN
@@ -163,12 +188,26 @@ if [[ $CONFIGURE_NOW =~ ^[Yy]$ ]]; then
     echo "Enter remote networks (comma-separated CIDRs, e.g., 10.0.0.0/16,172.16.0.0/12)"
     read -p "Remote networks: " REMOTE_NETWORKS
     
-    # Build AWS peer IPs array
+    # Build AWS peer outside IPs array
     AWS_PEERS="[\"$AWS_IP1\""
     if [ -n "$AWS_IP2" ]; then
         AWS_PEERS="$AWS_PEERS, \"$AWS_IP2\""
     fi
     AWS_PEERS="$AWS_PEERS]"
+    
+    # Build AWS inside IPs array
+    AWS_INSIDE_IPS="[\"$AWS_INSIDE_IP1\""
+    if [ -n "$AWS_IP2" ]; then
+        AWS_INSIDE_IPS="$AWS_INSIDE_IPS, \"$AWS_INSIDE_IP2\""
+    fi
+    AWS_INSIDE_IPS="$AWS_INSIDE_IPS]"
+    
+    # Build on-premises inside IPs array
+    ONPREM_INSIDE_IPS="[\"$ONPREM_INSIDE_IP1\""
+    if [ -n "$AWS_IP2" ]; then
+        ONPREM_INSIDE_IPS="$ONPREM_INSIDE_IPS, \"$ONPREM_INSIDE_IP2\""
+    fi
+    ONPREM_INSIDE_IPS="$ONPREM_INSIDE_IPS]"
     
     # Build remote networks array
     if [ -n "$REMOTE_NETWORKS" ]; then
@@ -199,6 +238,8 @@ if [[ $CONFIGURE_NOW =~ ^[Yy]$ ]]; then
   "tunnel_count": $([ -n "$AWS_IP2" ] && echo "2" || echo "1"),
   "aws_peer_ips": $AWS_PEERS,
   "onprem_peer_ip": "$ONPREM_IP",
+  "aws_inside_ips": $AWS_INSIDE_IPS,
+  "onprem_inside_ips": $ONPREM_INSIDE_IPS,
   "aws_asn": $AWS_ASN,
   "onprem_asn": $ONPREM_ASN,
   "remote_networks": $REMOTE_NETS,

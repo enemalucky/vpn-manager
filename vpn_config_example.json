@@ -1,0 +1,27 @@
+{
+  "vpn_id": "vpn-0123456789abcdef0",
+  "tunnel_count": 2,
+  "aws_peer_ips": [
+    "52.1.2.3",
+    "52.1.2.4"
+  ],
+  "onprem_peer_ip": "203.0.113.10",
+  "aws_inside_ips": [
+    "169.254.11.2",
+    "169.254.12.2"
+  ],
+  "onprem_inside_ips": [
+    "169.254.11.1",
+    "169.254.12.1"
+  ],
+  "aws_asn": 64512,
+  "onprem_asn": 65000,
+  "remote_networks": [
+    "10.0.0.0/16",
+    "172.16.0.0/12"
+  ],
+  "psk": {
+    "tunnel1": "your-pre-shared-key-for-tunnel-1",
+    "tunnel2": "your-pre-shared-key-for-tunnel-2"
+  }
+}

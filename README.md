@@ -81,9 +81,11 @@ The installer will:
 
 #### VPN Configuration (Optional)
 - AWS VPN Connection ID
-- AWS peer IPs
-- On-premises peer IP
-- ASN numbers
+- AWS peer outside IPs (public IPs)
+- On-premises outside IP (public IP)
+- AWS inside IPs (BGP peering IPs - 169.254.x.x)
+- On-premises inside IPs (BGP peering IPs - 169.254.x.x)
+- ASN numbers (AWS and on-premises)
 - Remote networks to monitor
 - Pre-shared keys
 
@@ -159,6 +161,8 @@ Location: `/etc/vpn/config.json`
   "tunnel_count": 2,
   "aws_peer_ips": ["52.1.2.3", "52.1.2.4"],
   "onprem_peer_ip": "10.0.1.1",
+  "aws_inside_ips": ["169.254.11.2", "169.254.12.2"],
+  "onprem_inside_ips": ["169.254.11.1", "169.254.12.1"],
   "aws_asn": 64512,
   "onprem_asn": 65000,
   "remote_networks": ["10.0.0.0/16", "172.16.0.0/12"],
@@ -168,6 +172,16 @@ Location: `/etc/vpn/config.json`
   }
 }
 ```
+
+**Configuration Fields:**
+- `aws_peer_ips`: AWS outside/public IPs for IPsec tunnels
+- `onprem_peer_ip`: On-premises outside/public IP
+- `aws_inside_ips`: AWS BGP inside IPs (169.254.x.x) for each tunnel
+- `onprem_inside_ips`: On-premises BGP inside IPs (169.254.x.x) for each tunnel
+- `aws_asn`: AWS BGP ASN
+- `onprem_asn`: On-premises BGP ASN
+- `remote_networks`: Networks to test connectivity
+- `psk`: Pre-shared keys for each tunnel
 
 ### Email Configuration
 Location: `/etc/vpn/email_config.json`
