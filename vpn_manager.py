@@ -114,8 +114,10 @@ config setup
 conn Tunnel{i}
     auto=start
     left=%defaultroute
-    leftid=%any
+    leftid={self.onprem_peer_ip}
+    leftauth=psk
     right={aws_ip}
+    rightauth=psk
     type=tunnel
     ikelifetime=8h
     keylife=1h
@@ -124,7 +126,6 @@ conn Tunnel{i}
     keyexchange=ikev1
     ike=aes128-sha1-modp1024
     esp=aes128-sha1-modp1024
-    auth=psk
     dpdaction=restart
     dpddelay=10s
     dpdtimeout=30s
@@ -140,7 +141,7 @@ conn Tunnel{i}
         
         for i, aws_ip in enumerate(self.aws_peer_ips, 1):
             psk = self.psk.get(f'tunnel{i}', 'YOUR_PRE_SHARED_KEY')
-            config += f"%any {aws_ip} : PSK \"{psk}\"\n"
+            config += f"{self.onprem_peer_ip} {aws_ip} : PSK \"{psk}\"\n"
         
         return config
     
@@ -204,13 +205,25 @@ set -e
 echo "Setting up VTI interfaces..."
 
 """
+        # Collect all inside IP subnets for policy routing
+        inside_subnets = []
+        
         for i, aws_ip in enumerate(self.aws_peer_ips, 1):
             # Use configured on-premises inside IP or default
             onprem_inside_ip = self.onprem_inside_ips[i-1] if i-1 < len(self.onprem_inside_ips) else f"169.254.{10+i}.1"
+            aws_inside_ip = self.aws_inside_ips[i-1] if i-1 < len(self.aws_inside_ips) else f"169.254.{10+i}.2"
+            
+            # Calculate /30 subnet from on-prem inside IP
+            # For 169.254.55.54, subnet is 169.254.55.52/30
+            ip_parts = onprem_inside_ip.split('.')
+            last_octet = int(ip_parts[3])
+            subnet_base = (last_octet // 4) * 4  # Round down to nearest multiple of 4
+            subnet = f"{ip_parts[0]}.{ip_parts[1]}.{ip_parts[2]}.{subnet_base}/30"
+            inside_subnets.append(subnet)
             
             script += f"""
 # Tunnel {i}
-# AWS Inside IP: {self.aws_inside_ips[i-1] if i-1 < len(self.aws_inside_ips) else f"169.254.{10+i}.2"}
+# AWS Inside IP: {aws_inside_ip}
 # On-Prem Inside IP: {onprem_inside_ip}
 ip tunnel add vti{i} mode vti local 0.0.0.0 remote {aws_ip} key {i} || true
 ip addr add {onprem_inside_ip}/30 dev vti{i} || true
@@ -219,8 +232,29 @@ sysctl -w net.ipv4.conf.vti{i}.disable_policy=1
 sysctl -w net.ipv4.conf.vti{i}.rp_filter=2
 
 """
+        
+        # Add policy routing rules for AWS EC2 instances
         script += """
+echo "Configuring policy routing rules..."
+
+# Remove any existing rules (ignore errors)
+"""
+        for subnet in inside_subnets:
+            script += f"ip rule del to {subnet} table main priority 100 2>/dev/null || true\n"
+        
+        script += """
+# Add policy routing rules to force BGP traffic through VTI interfaces
+# This is required on AWS EC2 instances where table 220 overrides main table
+"""
+        for subnet in inside_subnets:
+            script += f"ip rule add to {subnet} table main priority 100\n"
+        
+        script += """
+# Flush route cache to apply changes
+ip route flush cache
+
 echo "VTI interfaces configured successfully!"
+echo "Policy routing rules applied for AWS EC2 compatibility"
 """
         return script
     
