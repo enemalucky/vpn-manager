@@ -1,0 +1,16 @@
+[Unit]
+Description=Ensure IP Forwarding for VPN Gateway
+After=frr.service
+Requires=frr.service
+PartOf=frr.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/ensure_ip_forwarding.sh
+# Re-enable if FRR restarts
+ExecStartPost=/bin/sleep 2
+ExecStartPost=/usr/local/bin/ensure_ip_forwarding.sh
+
+[Install]
+WantedBy=multi-user.target

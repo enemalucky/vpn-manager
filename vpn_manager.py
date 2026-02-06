@@ -156,6 +156,7 @@ frr version 8.0
 frr defaults traditional
 hostname vpn-gateway
 log syslog informational
+ip forwarding
 no ipv6 forwarding
 service integrated-vtysh-config
 
