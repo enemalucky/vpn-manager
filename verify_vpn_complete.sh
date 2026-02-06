@@ -140,10 +140,12 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "8. BGP Session Status"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-vtysh -c "show bgp summary" 2>/dev/null || echo "Cannot connect to vtysh"
+BGP_OUTPUT=$(vtysh -c "show ip bgp summary" 2>/dev/null || vtysh -c "show bgp summary" 2>/dev/null || echo "Cannot connect to vtysh")
+echo "$BGP_OUTPUT"
 
-BGP1_UP=$(vtysh -c "show bgp summary" 2>/dev/null | grep "169.254.55.53" | grep -c -v "Connect\|Active\|Idle")
-BGP2_UP=$(vtysh -c "show bgp summary" 2>/dev/null | grep "169.254.253.49" | grep -c -v "Connect\|Active\|Idle")
+# Check for established sessions - look for uptime, not "Connect", "Active", "Idle", or "never"
+BGP1_UP=$(echo "$BGP_OUTPUT" | grep "169.254.55.53" | grep -v "Connect" | grep -v "Active" | grep -v "Idle" | grep -v "never" | grep -E "[0-9]+:[0-9]+:[0-9]+|[0-9]+d[0-9]+h" | wc -l)
+BGP2_UP=$(echo "$BGP_OUTPUT" | grep "169.254.253.49" | grep -v "Connect" | grep -v "Active" | grep -v "Idle" | grep -v "never" | grep -E "[0-9]+:[0-9]+:[0-9]+|[0-9]+d[0-9]+h" | wc -l)
 
 print_status $BGP1_UP "BGP Session Tunnel 1"
 print_status $BGP2_UP "BGP Session Tunnel 2"

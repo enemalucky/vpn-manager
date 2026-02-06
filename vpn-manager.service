@@ -1,0 +1,16 @@
+[Unit]
+Description=AWS Site-to-Site VPN Manager
+After=network.target strongswan.service frr.service
+Wants=strongswan.service frr.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/bin/vpn_manager.py --daemon --interval 300 --auto-fix --notify
+Restart=always
+RestartSec=10
+User=root
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

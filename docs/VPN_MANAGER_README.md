@@ -18,6 +18,7 @@ VPN Manager is a focused tool for AWS Site-to-Site VPN configuration, monitoring
 - Support for multiple tunnels
 - AWS best practices built-in
 - Easy PSK management
+- **Automatic policy routing configuration for AWS EC2**
 
 ### 2. Health Monitoring
 - IPsec tunnel status
@@ -43,6 +44,12 @@ VPN Manager is a focused tool for AWS Site-to-Site VPN configuration, monitoring
 - Health status reports
 - Connectivity test results
 - Remediation actions taken
+
+### 6. AWS EC2 Compatibility
+- **Automatic policy routing rules** to handle AWS EC2 table 220
+- Ensures BGP traffic uses VTI interfaces
+- Persistent across reboots
+- No manual configuration needed
 
 ## Installation
 

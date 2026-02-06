@@ -1,0 +1,11 @@
+[Unit]
+Description=VPN Health Check Timer
+Requires=vpn-health-check.service
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=60s
+Unit=vpn-health-check.service
+
+[Install]
+WantedBy=timers.target

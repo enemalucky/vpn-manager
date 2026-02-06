@@ -190,6 +190,14 @@ router bgp {self.onprem_asn}
         config += """ exit-address-family
 exit
 
+"""
+        # Add static routes for AWS inside IPs to ensure return traffic routing
+        for i in range(1, self.tunnel_count + 1):
+            aws_inside_ip = self.aws_inside_ips[i-1] if i-1 < len(self.aws_inside_ips) else f"169.254.{10+i}.2"
+            config += f"""ip route {aws_inside_ip}/32 vti{i}
+"""
+        
+        config += """
 line vty
 exit
 """

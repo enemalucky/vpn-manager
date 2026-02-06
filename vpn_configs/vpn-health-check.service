@@ -1,0 +1,12 @@
+[Unit]
+Description=VPN Health Check Service
+After=network.target strongswan.service frr.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/vpn_health_check.py
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
